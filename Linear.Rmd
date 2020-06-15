@@ -1,0 +1,500 @@
+---
+title: "R Notebook"
+output:
+  html_notebook: default
+  word_document: default
+  html_document:
+    df_print: paged
+---
+ 
+
+```{r}
+library(readr)
+library(dplyr)
+library(funModeling) 
+library(tidyverse) 
+library(Hmisc)
+```
+
+```{r}
+syn = read_csv("Syn.csv")
+```
+I decided to only work with 10000 observations. The reason for doing this was to run the code a little faster.
+```{r}
+syn$"SYN Flag Count" = as.factor(syn$"SYN Flag Count")
+syn$"ACK Flag Count" = as.factor(syn$"ACK Flag Count")
+syn$"FIN Flag Count" = as.factor(syn$"FIN Flag Count")
+syn$"RST Flag Count" = as.factor(syn$"RST Flag Count")
+syn$"PSH Flag Count" = as.factor(syn$"PSH Flag Count")
+syn$"URG Flag Count" = as.factor(syn$"URG Flag Count")
+syn$"CWE Flag Count" = as.factor(syn$"CWE Flag Count")
+syn$"ECE Flag Count" = as.factor(syn$"ECE Flag Count")
+syn$"Down/Up Ratio" = as.factor(syn$"Down/Up Ratio")
+print("Number of observations with NA or null values")
+sum(!complete.cases(syn))
+
+```
+
+
+```{r}
+#Since the number of incomplete observations (NA or null) is small, we can delete these observations
+syn=syn[complete.cases(syn), ]
+syn = syn %>% 
+  filter_all(all_vars(!is.infinite(.)))
+set.seed(123)
+index = sample(1:nrow(syn), 10000)
+synedited = syn[index,]
+```
+
+
+```{r}
+#install.packages("psych")
+library(psych)
+library(knitr)
+num_vars = unlist(lapply(synedited, is.numeric))
+options("scipen"=100, "digits"=4)
+kable(psych::describe(synedited[ , num_vars]))
+```
+
+
+```{r}
+synedited_scale = as.data.frame(scale(synedited[,num_vars]))
+summary(synedited_scale)
+```
+
+```{r}
+synedited_scale=within(synedited_scale, rm("Bwd PSH Flags","Fwd URG Flags","Bwd URG Flags","Fwd Avg Bytes/Bulk", "Fwd Avg Packets/Bulk", "Fwd Avg Bulk Rate","Bwd Avg Bytes/Bulk","Bwd Avg Packets/Bulk","Bwd Avg Bulk Rate", "Subflow Fwd Packets", "Subflow Fwd Bytes", "SimillarHTTP", "Unnamed: 0","Source Port","Destination Port", "Protocol"))
+```
+
+
+```{r}
+cormat=round(cor(synedited_scale),2)
+head(cormat)
+```
+
+```{r}
+#install.packages("corrplot")
+```
+
+
+```{r,fig.width=60, fig.height=60}
+library(corrplot)
+corrplot(cormat, method="circle",type="lower",order="hclust",tl.col="black")
+#png("correlationmatrix1.png", width = 1500,height = 1000)
+```
+
+
+```{r,fig.width=20, fig.height=15}
+library(reshape2)
+melted_cormat = melt(cormat)
+library(ggplot2)
+ggplot(data = melted_cormat, aes(x=Var1, y=Var2, fill=value)) + 
+  geom_tile()+ theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+```{r}
+synedited.pca = prcomp(synedited_scale, center = TRUE,scale. = TRUE)
+```
+
+
+```{r}
+library(factoextra)
+par(mar=c(1,1,1,1))
+fviz_pca_var(synedited.pca, col.var = "black", rrepel = TRUE)
+```
+
+```{r}
+#install.packages("factoextra")
+```
+
+
+```{r}
+library(factoextra)
+par(mar=c(20,20,20,20))
+fviz_eig(synedited.pca, addlabels = TRUE, ylim = c(0, 100))
+```
+
+```{r}
+vars_ex = get_pca_var(synedited.pca)
+vars_ex
+```
+
+```{r}
+vars_ex$contrib
+```
+
+```{r}
+View(synedited_scale)
+```
+
+
+#Modifying dataset to include only 7 variables
+```{r}
+synedited_scale_2 =  synedited[,c("Total Fwd Packets","Total Length of Fwd Packets","Fwd Packet Length Max","Fwd Packet Length Min","Flow Packets/s","Flow IAT Mean","Flow IAT Std","Flow Duration")]
+#num_vars_2 = unlist(lapply(synedited_scale_2, is.numeric))
+#synedited_scale_2 = as.data.frame(scale(synedited_scale_2[,num_vars_2]))
+#summary(synedited_scale_2)
+```
+
+##Data Exploration
+
+#Continuous variables
+First, we will analyse the distribution of the selected numerical variables.
+```{r}
+hist(synedited_scale_2$"Flow Duration", col = "blue",xlab = "Flow Duration",main = "Distribution of Flow Duration")
+abline(v = mean(synedited_scale_2$"Flow Duration"), col = "magenta", lwd = 4)
+
+hist(synedited_scale_2$"Total Fwd Packets", col = "blue")
+abline(v = mean(synedited_scale_2$"Total Fwd Packets"), col = "magenta", lwd = 4)
+
+hist(synedited_scale_2$`Total Length of Fwd Packets`, col = "blue")
+abline(v = mean(synedited_scale_2$`Total Length of Fwd Packets`), col = "magenta", lwd = 4)
+
+hist(synedited_scale_2$`Fwd Packet Length Max`, col = "blue")
+abline(v = mean(synedited_scale_2$`Fwd Packet Length Max`), col = "magenta", lwd = 4)
+
+hist(synedited_scale_2$`Fwd Packet Length Min`, col = "blue")
+abline(v = mean(synedited_scale_2$`Fwd Packet Length Min`), col = "magenta", lwd = 4)
+
+hist(synedited_scale_2$`Flow Packets/s`, col = "blue")
+abline(v = mean(synedited_scale_2$`Flow Packets/s`), col = "magenta", lwd = 4)
+
+hist(synedited_scale_2$`Flow IAT Mean`, col = "blue")
+abline(v = mean(synedited_scale_2$`Flow IAT Mean`), col = "magenta", lwd = 4)
+
+hist(synedited_scale_2$`Flow IAT Std`, col = "blue")
+abline(v = mean(synedited_scale_2$`Flow IAT Std`), col = "magenta", lwd = 4)
+
+```
+As can be seen from all the histograms, the distribution of the numerical variables is not normal. They are right-skewed. A linear regression does not work for non-normally distributed variables. Hence, these variables need to be transformed with a log transformation. A log transformation makes the distribution of these variables closer to normal distribution.
+
+```{r}
+
+ks.test(synedited_scale_2$"Flow Duration", "pnorm", mean=mean(synedited_scale_2$"Flow Duration"), sd=sd(synedited_scale_2$"Flow Duration"))
+
+ks.test(synedited_scale_2$"Total Fwd Packets", "pnorm", mean=mean(synedited_scale_2$"Total Fwd Packets"), sd=sd(synedited_scale_2$"Total Fwd Packets"))
+
+ks.test(synedited_scale_2$`Total Length of Fwd Packets`, "pnorm", mean=mean(synedited_scale_2$`Total Length of Fwd Packets`), sd=sd(synedited_scale_2$`Total Length of Fwd Packets`))
+
+ks.test(synedited_scale_2$`Fwd Packet Length Max`, "pnorm", mean=mean(synedited_scale_2$`Fwd Packet Length Max`), sd=sd(synedited_scale_2$`Fwd Packet Length Max`))
+
+ks.test(synedited_scale_2$`Fwd Packet Length Min`, "pnorm", mean=mean(synedited_scale_2$`Fwd Packet Length Min`), sd=sd(synedited_scale_2$`Fwd Packet Length Min`))
+
+ks.test(synedited_scale_2$`Flow Packets/s`, "pnorm", mean=mean(synedited_scale_2$`Flow Packets/s`), sd=sd(synedited_scale_2$`Flow Packets/s`))
+
+ks.test(synedited_scale_2$`Flow IAT Mean`, "pnorm", mean=mean(synedited_scale_2$`Flow IAT Mean`), sd=sd(synedited_scale_2$`Flow IAT Mean`))
+
+ks.test(synedited_scale_2$`Flow IAT Std`, "pnorm", mean=mean(synedited_scale_2$`Flow IAT Std`), sd=sd(synedited_scale_2$`Flow IAT Std`))
+
+```
+
+```{r}
+#install.packages("nortest")
+library(nortest)
+```
+
+```{r}
+ad.test(synedited_scale_2$"Flow Duration")
+ad.test(synedited_scale_2$"Total Fwd Packets")
+ad.test(synedited_scale_2$`Total Length of Fwd Packets`)
+ad.test(synedited_scale_2$`Fwd Packet Length Max`)
+ad.test(synedited_scale_2$`Fwd Packet Length Min`)
+ad.test(synedited_scale_2$`Flow Packets/s`)
+ad.test(synedited_scale_2$`Flow IAT Mean`)
+ad.test(synedited_scale_2$`Flow IAT Std`)
+
+```
+
+
+```{r}
+#log transformation
+synedited_scale_2$FlowDur_log=log1p(synedited_scale_2$"Flow Duration")
+synedited_scale_2$TotFwdPk_log=log1p(synedited_scale_2$"Total Fwd Packets")
+synedited_scale_2$TotLenFwdPk_log=log1p(synedited_scale_2$`Total Length of Fwd Packets`)
+synedited_scale_2$FwdPkLenMax_log=log1p(synedited_scale_2$`Fwd Packet Length Max`)
+synedited_scale_2$FwdPkLenMin_log=log1p(synedited_scale_2$`Fwd Packet Length Min`)
+synedited_scale_2$FlowPk_log=log1p(synedited_scale_2$`Flow Packets/s`)
+synedited_scale_2$FlowIATMean_log=log1p(synedited_scale_2$`Flow IAT Mean`)
+synedited_scale_2$FlowIATStd_log=log1p(synedited_scale_2$`Flow IAT Std`)
+
+```
+
+Next we analyze the log transformed Flow Duration (This is our dependent variable). The mean of log(FlowDuration) ~ 4, that is the mean flow duration is approximately 54.59 ms. The range for a flow duration is between 2.71 ms and 22,026.47 ms. This is a clear indication that the overall range and mean are being dictated by outlier observations, that are the attacks. To understand this better, we will separate out the attacks from non-attacks, to visualize their mean and ranges. 
+```{r}
+boxplot(synedited_scale_2$FlowDur_log, data = synedited_scale_2, main="Distribution of all Flow Duration", col = "sienna",ylab = "Log transformed flow duration")
+```
+
+```{r}
+attack=synedited_scale_2 %>% 
+    filter(synedited_scale_2$`Flow Duration` >150)
+boxplot(attack$FlowDur_log, data = attack, col = "red", ylab = "Log transformed flow duration",main="Distribution of Flow Duration of Attack Flows")
+```
+
+
+```{r}
+no_attack=synedited_scale_2 %>% 
+    filter(synedited_scale_2$`Flow Duration` <=150)
+boxplot(no_attack$FlowDur_log, data = no_attack, col = "green", ylab = "Log transformed flow duration",main="Distribution of Flow Duration of Non-Attack Flows")
+```
+
+```{r}
+df_cor = synedited_scale_2%>%
+  select("FlowDur_log", "TotFwdPk_log", "TotLenFwdPk_log","FwdPkLenMax_log","FwdPkLenMin_log","FlowPk_log","FlowIATMean_log","FlowIATStd_log")
+cormat=round(cor(df_cor),2)
+head(cormat)
+```
+
+
+```{r,fig.width=10, fig.height=10}
+library(corrplot)
+corrplot(cormat, method="circle",type="lower",order="hclust",tl.col="black")
+#png("correlationmatrix1.png", width = 1500,height = 1000)
+```
+
+
+
+Next we try to determine if a linear relationship exists between Flow Duration and Length of Fwd Packets. There is a positive upward trend. The scatterplot is built using the log transformations of these variables. This is done to ensure the graphical depiction of the trend is accurate.
+```{r}
+library(ggplot2)
+ggplot(synedited_scale_2, aes(x = synedited_scale_2$"Total Fwd Packets", y = synedited_scale_2$"Flow Duration")) +labs(y= "Flow Duration", x = "Total Fwd Packets") +
+   geom_point()+ #scatter plot
+    stat_smooth(method = "lm", # for smoothening using linear regression line
+        col = "#C42126",#red colour
+        se = FALSE,
+        size = 1)
+```
+
+The relationship between the total packets forwarded and the flow duration is positive and upward trending. 
+
+```{r}
+ggplot(synedited, aes(x = synedited_scale_2$`Total Length of Fwd Packets`, y = synedited_scale_2$"Flow Duration")) +labs(y= "Flow Duration", x = "Total Length of Fwd Packets")+
+    geom_point()+
+    stat_smooth(method = "lm", # for smoothening using linear regression
+        col = "#C42126",
+        se = FALSE,
+        size = 1)
+```
+
+Here we see that Flow duration and FwdIAT is inversely correlated. Flow Duration decreases with increase in FwdIAT.
+```{r}
+ggplot(synedited, aes(x = synedited_scale_2$`Fwd Packet Length Max`, y = synedited_scale_2$"Flow Duration")) +labs(y= "Flow Duration", x = "Fwd Packet Length Max")+
+    geom_point()+
+    stat_smooth(method = "lm", # for smoothening using linear regression
+        col = "#C42126",
+        se = FALSE,
+        size = 1)
+```
+
+```{r}
+ggplot(synedited, aes(x = synedited_scale_2$`Fwd Packet Length Min`, y = synedited_scale_2$"Flow Duration")) +labs(y= "Flow Duration", x = "Fwd Packet Length Min")+
+  geom_point()+  #these are log transformed datapoints
+  stat_smooth(method = "lm", # for smoothening using linear regression
+        col = "#C42126",
+        se = FALSE,
+        size = 1)
+
+ggplot(synedited, aes(x = synedited_scale_2$`Flow Packets/s`, y = synedited_scale_2$"Flow Duration")) +labs(y= "Flow Duration", x = "Flow Packets/s")+
+  geom_point()+  #these are log transformed datapoints
+  stat_smooth(method = "lm", # for smoothening using linear regression
+        col = "#C42126",
+        se = FALSE,
+        size = 1)
+
+ggplot(synedited, aes(x = synedited_scale_2$`Flow IAT Mean`, y = synedited_scale_2$"Flow Duration")) +labs(y= "Flow Duration", x = "Flow IAT Mean")+
+  geom_point()+  #these are log transformed datapoints
+  stat_smooth(method = "lm", # for smoothening using linear regression
+        col = "#C42126",
+        se = FALSE,
+        size = 1)
+
+ggplot(synedited, aes(x = synedited_scale_2$`Flow IAT Std`, y = synedited_scale_2$"Flow Duration")) +labs(y= "Flow Duration", x = "Flow IAT Std")+
+  geom_point()+  #these are log transformed datapoints
+  stat_smooth(method = "lm", # for smoothening using linear regression
+        col = "#C42126",
+        se = FALSE,
+        size = 1)
+```
+
+
+With all this analysis, we go on to build a linear regression model that predicts the flow duration based on the following predictor(independednt) variables:
+1. TotFwdPk_log - log transformation of length of forwarded packet
+2. TotLenFwdPk - log transformation of total packets forwarded
+3. FlowPk_log
+4. FlowIATMean_log 
+5. FlowIATStd_log
+
+##Build the model
+
+```{r}
+df_rr = synedited_scale_2%>%
+  select("FlowDur_log", "TotFwdPk_log", "TotLenFwdPk_log","FlowPk_log","FlowIATMean_log","FlowIATStd_log")
+```
+
+```{r}
+train_index_rr= sample(1:nrow(df_rr), 0.8 * nrow(df_rr))#80% of the data being used as training
+test_index_rr = setdiff(1:nrow(df_rr), train_index_rr)#20% of the data being used as testing
+train_rr=df_rr[train_index_rr,]
+test_rr=df_rr[test_index_rr,]
+```
+
+# Building the first linear regression model with all the five independent variables
+
+```{r}
+#Linear regression model
+linear_rr_2 = lm(FlowDur_log~
+            TotFwdPk_log+
+            TotLenFwdPk_log+
+            FlowPk_log+
+            FlowIATMean_log +
+            FlowIATStd_log 
+              , data = train_rr)
+```
+
+As can be seen from the summary of the initial model, the accuracy of the model is 99%, which is extremely good. However, it is important also to check the fit of the model, using the Residuals vs Fitted model.
+```{r}
+summary(linear_rr_2)
+```
+When the fitted results are compared to the residuals(error between the predicted red line and actual observation which is in blue) it can be seen that the model has a poor fit. This can lead to poor generalisation of the model, that is if the model is exposed to new data, the model may perform poorly, hence poor generalisability. 
+```{r}
+#Plotting the fitted vs residuals
+plot(linear_rr_2, pch=16, col="blue", lty=1, lwd=2, which=1)
+```
+
+After performing various permutations and combinations of the independednt variables, the following combination of variables gave a better fit, although the model accuracy is slightly lower, 97% compared to 99%, but it is still good.
+
+```{r}
+#Linear regression model
+linear_rr = lm(FlowDur_log~
+            TotFwdPk_log+
+            TotLenFwdPk_log+
+            FlowIATStd_log 
+              , data = train_rr)
+```
+
+
+```{r}
+summary(linear_rr)
+```
+R-square -- 97% indicating that the model can predict with 97% accuracy
+
+This plot shows a better fit between the residuals and the red line. Most of the observations(blue dots) are somewhat near the red line. However, the fit is still not perfect, indicative of the fact a more advanced modelling technique maybe needed, like non-linear modelling or unsupervised modelling such as K-means.
+```{r}
+#Plotting the fitted vs residuals
+plot(linear_rr, pch=16, col="blue", lty=1, lwd=2, which=1)
+```
+
+
+##Test the Model
+```{r}
+#First predict the flow duration for all the test data 
+# That is given the model built above, we only input LenFwdPk_log,FwdPk_log,FwdIAT_log,`ACK Flag Count`,`SYN Flag Count`,FwdIATS_log, to get a prediction of flow duration
+flow_dur_pred = predict(linear_rr,newdata = test_rr)
+```
+
+Calculating prediction accuracy and error rates
+```{r}
+#Then compare the FlowDur_log which is present in the test dataset with the predicted values to check accuracy 
+act_pred = data.frame(cbind(actuals=test_rr$FlowDur_log, predicteds=flow_dur_pred)) # actuals_predicteds 
+```
+
+```{r}
+print("Test Data Accuracy")
+cor(act_pred)
+```
+
+```{r}
+#actuals column has values from test dataset's FlowDur_log
+#predicteds column contains values that the model has predicted
+head(act_pred, n=10)
+```
+
+We use two measure to test the test-data accuracy:
+1. min max method (average between the minimum and the maximum prediction)
+   In this method, the value should be as close to 1 as possible to show that    the model is performing well
+2. mape(Mean absolute percentage deviation)
+   In this method, the value should be as close to 0 as possible to show that    the model is performing well
+```{r}
+#Min-Max Method
+min_max= mean(apply(act_pred, 1, min) / apply(act_pred, 1, max))  
+print(min_max)
+```
+
+```{r}
+#Mape
+mape = mean(abs((act_pred$predicteds - act_pred$actuals))/act_pred$actuals)
+print(mape)
+```
+From both the mape value and min-max values, we can conclude that our model is performing well. 
+Following the prediction of flow duration, we can use the flow duration value to predict an attack.
+
+```{r}
+#synedited_scale_2$FlowDur_log=log1p(synedited_scale_2$"Flow Duration")
+#synedited_scale_2$TotFwdPk_log=log1p(synedited_scale_2$"Total Fwd Packets")
+#synedited_scale_2$TotLenFwdPk_log=log1p(synedited_scale_2$`Total Length of Fwd Packets`)
+#synedited_scale_2$FwdPkLenMax_log=log1p(synedited_scale_2$`Fwd Packet Length Max`)
+#synedited_scale_2$FwdPkLenMin_log=log1p(synedited_scale_2$`Fwd Packet Length Min`)
+#synedited_scale_2$FlowPk_log=log1p(synedited_scale_2$`Flow Packets/s`)
+#synedited_scale_2$FlowIATMean_log=log1p(synedited_scale_2$`Flow IAT Mean`)
+#synedited_scale_2$FlowIATStd_log=log1p(synedited_scale_2$`Flow IAT Std`)
+
+synedited_scale_3 = as.data.frame(scale(synedited_scale_2[,10:16]))
+#summary(synedited_scale_3)
+```
+
+```{r}
+#Elbow Method for finding the optimal number of clusters
+set.seed(123)
+# Compute and plot wss for k = 2 to k = 15.
+k.max <- 15
+data <- synedited_scale_3
+wss <- sapply(1:k.max, 
+              function(k){kmeans(data, k, nstart=50,iter.max = 15 )$tot.withinss})
+wss
+plot(1:k.max, wss,
+     type="b", pch = 19, frame = FALSE, 
+     xlab="Number of clusters K",
+     ylab="Total within-clusters sum of squares")
+```
+
+```{r}
+#install.packages("clValid")
+library(clValid)
+```
+
+```{r}
+k4  = kmeans(synedited_scale_3, centers = 4, nstart = 25)
+k6  = kmeans(synedited_scale_3, centers = 6, nstart = 25)
+k7  = kmeans(synedited_scale_3, centers = 7, nstart = 25)
+k8  = kmeans(synedited_scale_3, centers = 8, nstart = 25)
+k9  = kmeans(synedited_scale_3, centers = 9, nstart = 25)
+k10  = kmeans(synedited_scale_3, centers = 10, nstart = 25)
+
+```
+
+```{r}
+kmeans_mod = c("4-cluster model","6-cluster model","7-cluster model","8-cluster model","9-cluster model","10-cluster model")
+wss = c(k4$tot.withinss,k6$tot.withinss,k7$tot.withinss,k8$tot.withinss,k9$tot.withinss,k10$tot.withinss)
+bss = c(k4$betweenss,k6$betweenss,k7$betweenss,k8$betweenss,k9$betweenss,k10$betweenss)
+mods=data.frame(kmeans_mod,wss,bss)
+mods
+```
+
+```{r}
+fviz_cluster(list(data = synedited_scale_3, cluster = k10$cluster)) + ggtitle("10-cluster model")
+```
+
+```{r}
+synedited_cluster = synedited_scale_2 %>%
+  mutate(cluster = k10$cluster)
+
+```
+
+
+
+```{r}
+f_vars = synedited_cluster %>% select(1:8)
+f_vars$f_brand = synedited_cluster$cluster
+cmeans = aggregate(f_vars[,1:8],by=list(f_vars$f_brand),mean)
+kable(cmeans)
+```
+
